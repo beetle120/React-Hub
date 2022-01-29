@@ -1,0 +1,245 @@
+
+<!DOCTYPE html >
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>React hub</title>
+  </head>
+  <body>
+    <h1>Hello User</h1>
+    <!-- 1. The <iframe> (and video player) will replace this <div> tag. -->
+    <div id="reactionSource"></div>
+    <div id="originalSource"></div>
+
+    <script>
+      // Next: 
+      // 1. connect XML - done
+      // 2. put XML data in object - done
+      // 3. Find closest lower time or 0 to video time - done
+      // 4. Put next time in check value - done
+      // 5. If playing add time difference to source and play / if PAUSED match source time and pause - done
+      // 6. Work out a time out to play the next section - done
+      // 7. Here - Work out changing time of original --- player gets caught in a loop don't know why  try: https://stackoverflow.com/questions/45948085/jquery-click-on-iframe-video-youtube
+      // 8. Work out URLs (can't be the same as the video)
+      // 9. Work out what to do if user changes source video
+      var ready1 = false;
+      var ready2 = false;
+      // to know if the user or code triggered the event 
+      var currentActionLockout = false;
+      var focusOn = '';
+      var currentTime;
+
+      // Load the JSON
+      fetch('data.json')
+        .then(response => response.json())
+        .then(jsonResponse => 
+          {
+            data = jsonResponse;
+            ready1 = true;
+            setup();
+          });
+
+
+      // 2. This code loads the IFrame Player API code asynchronously.
+      var tag = document.createElement('script');
+
+      tag.src = "https://www.youtube.com/iframe_api";
+      var firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+      // 3. This function creates an <iframe> (and YouTube player)
+      //    after the API code downloads.
+      var reactionSource;
+      var originalSource;
+      
+      function onYouTubeIframeAPIReady() {
+        ready2 = true;
+        setup();
+      }
+
+      function setup() {
+        if (ready1 && ready2) {
+          reactionSource = new YT.Player('reactionSource', {
+            height: '390',
+            width: '640',
+            videoId: data.video.id,
+            host: 'https://www.youtube.com',
+            playerVars: {
+              'playsinline': 1
+            },
+            events: {
+              'onReady': onPlayerReady1,
+              'onStateChange': reactorVideo
+            }
+          });
+          originalSource = new YT.Player('originalSource', {
+            height: '390',
+            width: '640',
+            videoId: data.actions.sourceID,
+            host: 'https://www.youtube.com',
+            playerVars: {
+              'playsinline': 1
+            },
+            events: {
+              'onReady': onPlayerReady2,
+              'onStateChange': reactionVideo
+            }
+          });
+        }
+      };
+
+      // 4. The API will call this function when the video player is ready.
+      function onPlayerReady1(event) {
+        event.target.playVideo();
+      }
+
+      function onPlayerReady2(event) {
+        event.target.playVideo();
+      }
+
+
+      // Actions
+      function reactorVideo(event) {
+          let currentTime = reactionSource.getCurrentTime();
+          let currentAction = findOriginalTime(currentTime);
+          let originalTime = 0;
+        // let timeDifference = 1;
+
+          // if playing then reaction video it's time since last video checkpoint 
+          // if not then it's paused at the time
+          if (currentAction.state == "PLAYING") {
+            originalTime = currentAction.sourceTime + (currentTime - currentAction.reactionTime);
+          } else {
+            originalTime = currentAction.sourceTime
+          }
+
+          //Put original video at time 
+          if (currentActionLockout == false) {
+              console.log("Reaction");
+              currentActionLockout = true;
+              if (originalTime > 0){
+                  originalSource.seekTo(originalTime, true);
+                }
+              //If original playing make it play otherwise pause video 
+              console.log("currentAction.state: " + currentAction.state + " && reactionSource.getPlayerState():" + reactionSource.getPlayerState())
+              if ((currentAction.state == "PLAYING") && (reactionSource.getPlayerState() == YT.PlayerState.PLAYING)) {
+                originalSource.playVideo();
+              } else {
+                originalSource.pauseVideo();
+              }
+              
+          
+
+            let nextCheckpoint;
+            //Set the timeout to recall this function when the next action is made
+            if (nextCheckpoint != undefined){
+              clearTimeout(nextCheckpoint);
+            }
+
+            // Start new timer only if video is playing
+            if (reactionSource.getPlayerState() == YT.PlayerState.PLAYING) {
+              let timeDifference = currentAction.nextReactionTime - currentTime;
+
+              timeDifference * 1000
+              nextCheckpoint = setTimeout(reactorVideo, (timeDifference * 1000));
+            }
+            setTimeout(unlock, 1000);
+          }
+
+          
+          
+          // if (event.data == YT.PlayerState.PLAYING) {
+          //   originalSource.seekTo(currentTime + 2);
+          //   originalSource.playVideo();
+          // } else if (event.data == YT.PlayerState.PAUSED) {
+          //     originalSource.seekTo(currentTime + 2);
+          //     originalSource.pauseVideo();
+          //   }
+      }
+
+      function reactionVideo(event) {
+
+        if (currentActionLockout == false) {
+          console.log("Original");
+          currentActionLockout = true;
+          if (event.data == YT.PlayerState.PLAYING) {
+            var seekTime = findReactionTime(originalSource.getCurrentTime());
+            //originalSource.seekTo(seekTime.sourceTime);
+            reactionSource.seekTo(seekTime.reactionTime, true); 
+            reactionSource.playVideo();
+          } else {
+            //reactionSource.pauseVideo();
+          }
+          setTimeout(unlock, 1000);
+        }
+      }
+
+      function findOriginalTime(currentTime) {
+
+        // set tht currentAction object to start of video default
+        
+        let currentAction = {
+          reactionTime: 0,
+          nextReactionTime: data.actions.action[0].reactionTime,
+          sourceTime: 0,
+          state: "PAUSED"
+        }
+
+        // Check how far along the video is
+          for(let i = 0; i < data.actions.action.length; i++) {
+            if (currentTime > currentAction.nextReactionTime) {
+              currentAction.reactionTime = data.actions.action[i].reactionTime;
+              currentAction.sourceTime = data.actions.action[i].sourceTime;
+              currentAction.state = data.actions.action[i].state;
+              if (i != (data.actions.action.length - 1)) {
+                currentAction.nextReactionTime = data.actions.action[i+1].reactionTime
+              } else {
+                currentAction.nextReactionTime = -1;
+              }
+            }
+          }
+          return currentAction;
+      }
+
+      function findReactionTime(currentTime) {
+
+        let blockLength = 0; 
+        let targetTime = false;
+
+        let returnTime = {
+          reactionTime: 0,
+          sourceTime: 0
+        }
+        
+        //Loop all actions except last for difference in time to find the block the reactor is on
+        for(let i = 0; i < (data.actions.action.length-1); i++) {
+          if (data.actions.action[i].state == "PLAYING") {
+            blockLength = data.actions.action[i+1].reactionTime - data.actions.action[i].reactionTime
+            // if on the current block then return the time the time the reaction video should skip to
+            if (currentTime > data.actions.action[i].sourceTime && currentTime < (data.actions.action[i].sourceTime + blockLength)) {
+              returnTime.reactionTime = data.actions.action[i].reactionTime + (currentTime - data.actions.action[i].sourceTime);
+              returnTime.sourceTime = currentTime; 
+              return returnTime;
+              break;
+            }
+          }
+        }
+      }
+
+      function unlock() {
+        
+        console.log("here at unlock: " + (Date.now() - currentTime));
+        currentActionLockout = false;
+        currentTime = Date.now();
+      }
+
+      document.getElementById('reactionSource').onclick=function(){
+        console.log("here");
+        focusOn = 'reaction'
+      }
+      
+      document.getElementById('originalSource').onclick=function(){focusOn = 'original'}
+    </script>
+  </body>
+</html>
