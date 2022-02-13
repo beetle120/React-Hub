@@ -5,12 +5,19 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>React hub</title>
+    <link rel="stylesheet" href="styles.css">
+
   </head>
   <body>
     <h1>Hello User</h1>
     <!-- 1. The <iframe> (and video player) will replace this <div> tag. -->
     <div id="reactionSource"></div>
     <div id="originalSource"></div>
+
+    <label class="switch">
+      <input id="targetOriginal" title="Switch control to the original video" type="checkbox">
+      <span class="slider round"></span>
+    </label>
 
     <script>
       // Next: 
@@ -66,11 +73,12 @@
             videoId: data.video.id,
             host: 'https://www.youtube.com',
             playerVars: {
-              'playsinline': 1
+              'playsinline': 1,
+              'fs': 0
             },
             events: {
               'onReady': onPlayerReady1,
-              'onStateChange': reactorVideo
+              'onStateChange': userChange
             }
           });
           originalSource = new YT.Player('originalSource', {
@@ -79,11 +87,12 @@
             videoId: data.actions.sourceID,
             host: 'https://www.youtube.com',
             playerVars: {
-              'playsinline': 1
+              'playsinline': 1,
+              'fs': 0
             },
             events: {
               'onReady': onPlayerReady2,
-              'onStateChange': reactionVideo
+              'onStateChange': userChange
             }
           });
         }
@@ -96,6 +105,16 @@
 
       function onPlayerReady2(event) {
         event.target.playVideo();
+      }
+
+      //Checks which is toggled to have control
+      function userChange(event) {
+        console.log(document.getElementById("targetOriginal").checked);
+        if (document.getElementById("targetOriginal").checked) {
+          reactionVideo(event);
+        } else {
+          reactorVideo(event);
+        }
       }
 
 
@@ -115,36 +134,32 @@
           }
 
           //Put original video at time 
-          if (currentActionLockout == false) {
-              console.log("Reaction");
-              currentActionLockout = true;
-              if (originalTime > 0){
-                  originalSource.seekTo(originalTime, true);
-                }
-              //If original playing make it play otherwise pause video 
-              console.log("currentAction.state: " + currentAction.state + " && reactionSource.getPlayerState():" + reactionSource.getPlayerState())
-              if ((currentAction.state == "PLAYING") && (reactionSource.getPlayerState() == YT.PlayerState.PLAYING)) {
-                originalSource.playVideo();
-              } else {
-                originalSource.pauseVideo();
+            console.log("Reaction");
+            if (originalTime > 0){
+                originalSource.seekTo(originalTime, true);
               }
-              
-          
-
-            let nextCheckpoint;
-            //Set the timeout to recall this function when the next action is made
-            if (nextCheckpoint != undefined){
-              clearTimeout(nextCheckpoint);
+            //If original playing make it play otherwise pause video 
+            console.log("currentAction.state: " + currentAction.state + " && reactionSource.getPlayerState():" + reactionSource.getPlayerState())
+            if ((currentAction.state == "PLAYING") && (reactionSource.getPlayerState() == YT.PlayerState.PLAYING)) {
+              originalSource.playVideo();
+            } else {
+              originalSource.pauseVideo();
             }
+            
+        
 
-            // Start new timer only if video is playing
-            if (reactionSource.getPlayerState() == YT.PlayerState.PLAYING) {
-              let timeDifference = currentAction.nextReactionTime - currentTime;
+          let nextCheckpoint;
+          //Set the timeout to recall this function when the next action is made
+          if (nextCheckpoint != undefined){
+            clearTimeout(nextCheckpoint);
+          }
 
-              timeDifference * 1000
-              nextCheckpoint = setTimeout(reactorVideo, (timeDifference * 1000));
-            }
-            setTimeout(unlock, 1000);
+          // Start new timer only if video is playing
+          if (reactionSource.getPlayerState() == YT.PlayerState.PLAYING) {
+            let timeDifference = currentAction.nextReactionTime - currentTime;
+
+            timeDifference * 1000
+            nextCheckpoint = setTimeout(reactorVideo, (timeDifference * 1000));
           }
 
           
@@ -160,9 +175,7 @@
 
       function reactionVideo(event) {
 
-        if (currentActionLockout == false) {
           console.log("Original");
-          currentActionLockout = true;
           if (event.data == YT.PlayerState.PLAYING) {
             var seekTime = findReactionTime(originalSource.getCurrentTime());
             //originalSource.seekTo(seekTime.sourceTime);
@@ -171,8 +184,6 @@
           } else {
             //reactionSource.pauseVideo();
           }
-          setTimeout(unlock, 1000);
-        }
       }
 
       function findOriginalTime(currentTime) {
@@ -225,13 +236,6 @@
             }
           }
         }
-      }
-
-      function unlock() {
-        
-        console.log("here at unlock: " + (Date.now() - currentTime));
-        currentActionLockout = false;
-        currentTime = Date.now();
       }
 
       document.getElementById('reactionSource').onclick=function(){
