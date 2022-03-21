@@ -59,6 +59,7 @@
       //    after the API code downloads.
       var reactionSource;
       var originalSource;
+      var locked = false;
       
       function onYouTubeIframeAPIReady() {
         ready2 = true;
@@ -109,14 +110,15 @@
 
       //Checks which is toggled to have control
       function userChange(event) {
+        if (!timeSyncCheck(reactionSource.getCurrentTime(), originalSource.getCurrentTime())) {
         console.log(document.getElementById("targetOriginal").checked);
-        if (document.getElementById("targetOriginal").checked) {
-          reactionVideo(event);
-        } else {
-          reactorVideo(event);
+          if (document.getElementById("targetOriginal").checked) {
+            reactionVideo(event);
+          } else {
+            reactorVideo(event);
+          }
         }
       }
-
 
       // Actions
       function reactorVideo(event) {
@@ -134,16 +136,20 @@
           }
 
           //Put original video at time 
-            console.log("Reaction");
+            // console.log("Reaction");
             if (originalTime > 0){
                 originalSource.seekTo(originalTime, true);
               }
             //If original playing make it play otherwise pause video 
-            console.log("currentAction.state: " + currentAction.state + " && reactionSource.getPlayerState():" + reactionSource.getPlayerState())
+            // console.log("currentAction.state: " + currentAction.state + " && reactionSource.getPlayerState():" + reactionSource.getPlayerState())
             if ((currentAction.state == "PLAYING") && (reactionSource.getPlayerState() == YT.PlayerState.PLAYING)) {
-              originalSource.playVideo();
+              // if (!originalSource.PLAYING) {
+                 originalSource.playVideo();
+              // }
+              console.log(originalSource.getVideoLoadedFraction())
             } else {
               originalSource.pauseVideo();
+              console.log("VIDEO PAUSED");
             }
             
         
@@ -158,8 +164,10 @@
           if (reactionSource.getPlayerState() == YT.PlayerState.PLAYING) {
             let timeDifference = currentAction.nextReactionTime - currentTime;
 
-            timeDifference * 1000
-            nextCheckpoint = setTimeout(reactorVideo, (timeDifference * 1000));
+            // timeDifference * 1000
+
+            console.log("timeDifference="+(timeDifference*1000));
+            nextCheckpoint = setTimeout(userChange, (timeDifference * 1000));
           }
 
           
@@ -235,6 +243,16 @@
               break;
             }
           }
+        }
+      }
+
+      // Checks if the video is +/- 1 sec within the expected time.
+      function timeSyncCheck(reactionTime, sourceTime) {
+        var returnTime = findReactionTime(sourceTime);
+        if (Math.abs(returnTime.reactionTime - reactionTime) <= 1 ) {
+          return true;
+        } else {
+          return false;
         }
       }
 
