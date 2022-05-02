@@ -110,11 +110,16 @@
 
       //Checks which is toggled to have control
       function userChange(event) {
-        if (!timeSyncCheck(reactionSource.getCurrentTime(), originalSource.getCurrentTime())) {
-        console.log(document.getElementById("targetOriginal").checked);
+
+        // console.log(!timeSyncCheck(reactionSource.getCurrentTime(), originalSource.getCurrentTime()) +  " && " + !pauseSyncCheck(reactionSource.getCurrentTime(), reactionSource.getPlayerState(), originalSource.getPlayerState()));
+        console.log(!timeSyncCheck(reactionSource.getCurrentTime(), originalSource.getCurrentTime()) || !pauseSyncCheck(reactionSource.getCurrentTime(), reactionSource.getPlayerState(), originalSource.getPlayerState()));
+
+        // Checks if the video is +/- 1 second of correct time (to avoid loops)
+        if (!timeSyncCheck(reactionSource.getCurrentTime(), originalSource.getCurrentTime()) || !pauseSyncCheck(reactionSource.getCurrentTime(), reactionSource.getPlayerState(), originalSource.getPlayerState())) {
           if (document.getElementById("targetOriginal").checked) {
             reactionVideo(event);
           } else {
+            console.log("here");
             reactorVideo(event);
           }
         }
@@ -129,27 +134,23 @@
 
           // if playing then reaction video it's time since last video checkpoint 
           // if not then it's paused at the time
-          if (currentAction.state == "PLAYING") {
-            originalTime = currentAction.sourceTime + (currentTime - currentAction.reactionTime);
-          } else {
-            originalTime = currentAction.sourceTime
-          }
+          // if (currentAction.state == "PLAYING") {
+          //   originalTime = currentAction.sourceTime + (currentTime - currentAction.reactionTime);
+          // } else {
+          //   originalTime = currentAction.sourceTime
+          // }
 
           //Put original video at time 
-            // console.log("Reaction");
-            if (originalTime > 0){
-                originalSource.seekTo(originalTime, true);
+            if (currentAction.originalTime > 0){
+                originalSource.seekTo(currentAction.originalTime, true);
               }
             //If original playing make it play otherwise pause video 
-            // console.log("currentAction.state: " + currentAction.state + " && reactionSource.getPlayerState():" + reactionSource.getPlayerState())
             if ((currentAction.state == "PLAYING") && (reactionSource.getPlayerState() == YT.PlayerState.PLAYING)) {
               // if (!originalSource.PLAYING) {
                  originalSource.playVideo();
               // }
-              console.log(originalSource.getVideoLoadedFraction())
             } else {
               originalSource.pauseVideo();
-              console.log("VIDEO PAUSED");
             }
             
         
@@ -166,7 +167,6 @@
 
             // timeDifference * 1000
 
-            console.log("timeDifference="+(timeDifference*1000));
             nextCheckpoint = setTimeout(userChange, (timeDifference * 1000));
           }
 
@@ -183,7 +183,6 @@
 
       function reactionVideo(event) {
 
-          console.log("Original");
           if (event.data == YT.PlayerState.PLAYING) {
             var seekTime = findReactionTime(originalSource.getCurrentTime());
             //originalSource.seekTo(seekTime.sourceTime);
@@ -194,6 +193,7 @@
           }
       }
 
+      // Reaction video time in and returns where time original video should be at
       function findOriginalTime(currentTime) {
 
         // set tht currentAction object to start of video default
@@ -202,7 +202,8 @@
           reactionTime: 0,
           nextReactionTime: data.actions.action[0].reactionTime,
           sourceTime: 0,
-          state: "PAUSED"
+          state: "PAUSED",
+          originalTime: 0
         }
 
         // Check how far along the video is
@@ -218,9 +219,16 @@
               }
             }
           }
+          if (currentAction.state == "PLAYING") {
+            currentAction.originalTime = currentAction.sourceTime + (currentTime - currentAction.reactionTime);
+          } else {
+            currentAction.originalTime = currentAction.sourceTime
+          }
+
           return currentAction;
       }
 
+      // Original video time in and returns where time reaction video should be at
       function findReactionTime(currentTime) {
 
         let blockLength = 0; 
@@ -239,25 +247,45 @@
             if (currentTime > data.actions.action[i].sourceTime && currentTime < (data.actions.action[i].sourceTime + blockLength)) {
               returnTime.reactionTime = data.actions.action[i].reactionTime + (currentTime - data.actions.action[i].sourceTime);
               returnTime.sourceTime = currentTime; 
-              return returnTime;
               break;
             }
           }
         }
+        return returnTime;
       }
 
       // Checks if the video is +/- 1 sec within the expected time.
       function timeSyncCheck(reactionTime, sourceTime) {
-        var returnTime = findReactionTime(sourceTime);
-        if (Math.abs(returnTime.reactionTime - reactionTime) <= 1 ) {
+        var returnTime = findOriginalTime(reactionTime);
+
+        // ERROR HERE: wrong times
+        //currentAction.sourceTime + (currentTime - currentAction.reactionTime);
+        console.log(returnTime.originalTime + " " + sourceTime);
+        if (Math.abs(returnTime.originalTime - sourceTime) <= 1 ) {
           return true;
         } else {
           return false;
         }
       }
 
+      function pauseSyncCheck(reactionTime, reactionStatus, originalStatus) {
+        console.log(reactionTime, reactionStatus, originalStatus);
+        //if original is paused then the reaction is always needs to be paused 
+        if (reactionStatus != 1 && originalStatus == 1) {
+          return false;
+        }
+
+        var originalStatusText = "PAUSED";
+        if (originalStatus == 1) {
+          originalStatusText = "PLAYING"
+        }
+        if (findOriginalTime(reactionTime).state != originalStatusText) {
+          return false;
+        }
+        return true
+      }
+
       document.getElementById('reactionSource').onclick=function(){
-        console.log("here");
         focusOn = 'reaction'
       }
       
